@@ -2,13 +2,16 @@
 import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 
-type Person = { name: string; paid: boolean };
+type Member = { name: string; paid: boolean };
 type Expense = {
-  id: number;
+  id: string;
   title: string;
   amount: number;
-  paidBy: string;
-  people: Person[];
+  paid_by: string;
+  created_by: string;
+  members: Member[];
+  settled: boolean;
+  tx_hash: string | null;
 };
 
 export default function Home() {
@@ -18,11 +21,12 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [paidBy, setPaidBy] = useState("");
   const [members, setMembers] = useState("");
-  const [loading, setLoading] = useState<number | null>(null);
-  const [settled, setSettled] = useState<number[]>([]);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [settled, setSettled] = useState<string[]>([]);
   const [walletAddress, setWalletAddress] = useState<string>("");
-  const [txHash, setTxHash] = useState<{ [id: number]: string }>({});
+  const [txHash, setTxHash] = useState<{ [id: string]: string }>({});
   const [mounted, setMounted] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -36,27 +40,47 @@ export default function Home() {
       } else {
         setWalletAddress("0x0229a0d503a343233aa299cbb8f119321902ba292a276a82ad6fbc2e1c5e56f1");
       }
+      loadExpenses();
     }
   }, [authenticated, user]);
 
-  const addExpense = () => {
-    if (!title || !amount || !paidBy || !members) return;
-    const peopleList = members.split(",").map((m) => m.trim()).filter(Boolean).map((name) => ({ name, paid: false }));
-    setExpenses([...expenses, { id: Date.now(), title, amount: parseFloat(amount), paidBy, people: peopleList }]);
-    setTitle(""); setAmount(""); setPaidBy(""); setMembers("");
+  const loadExpenses = async () => {
+    if (!user?.email?.address) return;
+    const res = await fetch("/api/expenses?email=" + user.email.address);
+    const data = await res.json();
+    if (data.expenses) setExpenses(data.expenses);
   };
 
-  const settleExpense = async (expenseId: number) => {
+  const addExpense = async () => {
+    if (!title || !amount || !paidBy || !members) return;
+    if (!authenticated) { login(); return; }
+    const peopleList = members.split(",").map((m) => m.trim()).filter(Boolean).map((name) => ({ name, paid: false }));
+    const res = await fetch("/api/expenses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        amount: parseFloat(amount),
+        paid_by: paidBy,
+        created_by: user?.email?.address || "",
+        members: peopleList,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setExpenses([data.expense, ...expenses]);
+      setTitle(""); setAmount(""); setPaidBy(""); setMembers("");
+    }
+  };
+
+  const settleExpense = async (expenseId: string) => {
     if (!authenticated) { login(); return; }
     setLoading(expenseId);
     try {
       const response = await fetch("/api/transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: "0.001",
-          recipientAddress: walletAddress || "0x0229a0d503a343233aa299cbb8f119321902ba292a276a82ad6fbc2e1c5e56f1",
-        }),
+        body: JSON.stringify({ amount: "0.001", recipientAddress: walletAddress }),
       });
       const data = await response.json();
       if (data.success && data.txHash) {
@@ -71,7 +95,16 @@ export default function Home() {
     setLoading(null);
   };
 
-  const totalOwed = expenses.filter((e) => !settled.includes(e.id)).reduce((sum, e) => sum + e.amount, 0);
+  const copyLink = (id: string) => {
+    navigator.clipboard.writeText(window.location.origin + "/expense/" + id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const totalOwed = expenses
+    .filter((e) => !settled.includes(e.id))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
+
   const shortAddress = (addr: string) => addr ? addr.slice(0, 6) + "..." + addr.slice(-4) : "";
 
   if (!ready || !mounted) {
@@ -89,8 +122,8 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
       <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between backdrop-blur-sm sticky top-0 z-10 bg-black/20">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-sm font-bold shadow-lg shadow-purple-500/30">S</div>
-          <span className="font-bold text-lg tracking-tight">StarkSplit</span>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-sm font-bold">S</div>
+          <span className="font-bold text-lg">StarkSplit</span>
           <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">StarkZap</span>
         </div>
         {authenticated ? (
@@ -176,7 +209,7 @@ export default function Home() {
           <div className="space-y-4">
             <h2 className="font-semibold text-white/50 text-xs uppercase tracking-wider">Expenses ({expenses.length})</h2>
             {expenses.map((exp) => {
-              const perPerson = (exp.amount / (exp.people.length + 1)).toFixed(2);
+              const perPerson = (Number(exp.amount) / (exp.members.length + 1)).toFixed(2);
               const isSettled = settled.includes(exp.id);
               const isLoading = loading === exp.id;
               const hash = txHash[exp.id];
@@ -190,7 +223,7 @@ export default function Home() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold capitalize">{exp.title}</p>
-                      <p className="text-white/40 text-xs mt-0.5">Paid by {exp.paidBy}</p>
+                      <p className="text-white/40 text-xs mt-0.5">Paid by {exp.paid_by}</p>
                     </div>
                     <div className="text-right">
                       <p className={"text-2xl font-bold " + (isSettled ? "text-green-400" : "text-purple-400")}>${exp.amount}</p>
@@ -198,12 +231,18 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {exp.people.map((p) => (
-                      <span key={p.name} className={"text-xs px-3 py-1 rounded-full " + (isSettled ? "bg-green-500/10 text-green-300" : "bg-white/10 text-white/60")}>
-                        {p.name} owes ${perPerson}
+                    {exp.members.map((m: Member) => (
+                      <span key={m.name} className={"text-xs px-3 py-1 rounded-full " + (isSettled ? "bg-green-500/10 text-green-300" : "bg-white/10 text-white/60")}>
+                        {m.name} owes ${perPerson}
                       </span>
                     ))}
                   </div>
+                  <button
+                    onClick={() => copyLink(exp.id)}
+                    className="w-full py-2 rounded-xl text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 transition"
+                  >
+                    {copiedId === exp.id ? "Link copied!" : "Copy payment link for friends"}
+                  </button>
                   {isSettled && hash && (
                     <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
                       <p className="text-xs text-green-400/60 mb-0.5">Transaction Hash</p>
