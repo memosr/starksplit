@@ -16,9 +16,6 @@ export default function PrivyProviderWrapper({
           theme: "dark",
           accentColor: "#9333ea",
         },
-        embeddedWallets: {
-          createOnLogin: "users-without-wallets",
-        },
       }}
     >
       {children}
