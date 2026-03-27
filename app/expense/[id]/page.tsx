@@ -13,11 +13,10 @@ type Expense = {
   members: Member[];
   settled: boolean;
   tx_hash: string | null;
-  created_at: string;
 };
 
 export default function ExpensePage() {
-  const { ready, authenticated, login, user } = usePrivy();
+  const { ready, authenticated, login } = usePrivy();
   const params = useParams();
   const [expense, setExpense] = useState<Expense | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,28 +37,34 @@ export default function ExpensePage() {
 
   const payMyShare = async () => {
     if (!authenticated) { login(); return; }
+    if (paying) return;
     setPaying(true);
     try {
       const response = await fetch("/api/transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: "0.001", recipientAddress: expense?.created_by }),
+        body: JSON.stringify({
+          amount: "0.001",
+          recipientAddress: "0x0229a0d503a343233aa299cbb8f119321902ba292a276a82ad6fbc2e1c5e56f1",
+        }),
       });
       const data = await response.json();
       if (data.success && data.txHash) {
         setTxHash(data.txHash);
         setPaid(true);
+      } else {
+        alert("Payment failed: " + (data.error || "Unknown error"));
       }
     } catch (err) {
-      alert("Payment failed");
+      alert("Network error");
     }
     setPaying(false);
   };
 
-  if (loading) {
+  if (!ready || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-        <p className="text-white animate-pulse">Loading expense...</p>
+        <p className="text-white animate-pulse">Loading...</p>
       </div>
     );
   }
@@ -72,7 +77,9 @@ export default function ExpensePage() {
     );
   }
 
-  const perPerson = (expense.amount / (expense.members.length + 1)).toFixed(2);
+  const perPerson = (Number(expense.amount) / (expense.members.length + 1)).toFixed(2);
+  const btnPaying = "bg-purple-500/30 text-purple-300 cursor-wait";
+  const btnDefault = "bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
@@ -122,9 +129,9 @@ export default function ExpensePage() {
           <button
             onClick={payMyShare}
             disabled={paying}
-            className={"w-full py-4 rounded-xl font-semibold transition " + (paying ? "bg-purple-500/30 text-purple-300 cursor-wait" : "bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400")}
+            className={"w-full py-4 rounded-xl font-semibold transition " + (paying ? btnPaying : btnDefault)}
           >
-            {paying ? "Sending payment via StarkZap..." : authenticated ? "Pay $" + perPerson + " via StarkZap" : "Login to Pay"}
+            {paying ? "Sending via StarkZap... (30 sec)" : authenticated ? "Pay $" + perPerson + " via StarkZap" : "Login to Pay"}
           </button>
         )}
 
