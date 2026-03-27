@@ -24,17 +24,15 @@ export default function Home() {
   const [txHash, setTxHash] = useState<{ [id: number]: string }>({});
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (authenticated && user) {
-      const wallet = user.linkedAccounts?.find(
-        (a: any) => a.type === "wallet" || a.type === "smart_wallet"
+      const wallet = (user.linkedAccounts as any[])?.find(
+        (a) => a.type === "wallet" || a.type === "smart_wallet"
       );
-      if (wallet && "address" in wallet) {
-        setWalletAddress(wallet.address as string);
+      if (wallet?.address) {
+        setWalletAddress(wallet.address);
       } else {
         setWalletAddress("0x0229a0d503a343233aa299cbb8f119321902ba292a276a82ad6fbc2e1c5e56f1");
       }
@@ -43,15 +41,8 @@ export default function Home() {
 
   const addExpense = () => {
     if (!title || !amount || !paidBy || !members) return;
-    const peopleList = members
-      .split(",")
-      .map((m) => m.trim())
-      .filter((m) => m)
-      .map((name) => ({ name, paid: false }));
-    setExpenses([
-      ...expenses,
-      { id: Date.now(), title, amount: parseFloat(amount), paidBy, people: peopleList },
-    ]);
+    const peopleList = members.split(",").map((m) => m.trim()).filter(Boolean).map((name) => ({ name, paid: false }));
+    setExpenses([...expenses, { id: Date.now(), title, amount: parseFloat(amount), paidBy, people: peopleList }]);
     setTitle(""); setAmount(""); setPaidBy(""); setMembers("");
   };
 
@@ -80,12 +71,8 @@ export default function Home() {
     setLoading(null);
   };
 
-  const totalOwed = expenses
-    .filter((e) => !settled.includes(e.id))
-    .reduce((sum, e) => sum + e.amount, 0);
-
-  const shortAddress = (addr: string) =>
-    addr ? addr.slice(0, 6) + "..." + addr.slice(-4) : "";
+  const totalOwed = expenses.filter((e) => !settled.includes(e.id)).reduce((sum, e) => sum + e.amount, 0);
+  const shortAddress = (addr: string) => addr ? addr.slice(0, 6) + "..." + addr.slice(-4) : "";
 
   if (!ready || !mounted) {
     return (
@@ -104,7 +91,7 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-sm font-bold shadow-lg shadow-purple-500/30">S</div>
           <span className="font-bold text-lg tracking-tight">StarkSplit</span>
-          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">⚡ StarkZap</span>
+          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">StarkZap</span>
         </div>
         {authenticated ? (
           <div className="flex items-center gap-3">
@@ -118,7 +105,7 @@ export default function Home() {
             <button onClick={logout} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition">Logout</button>
           </div>
         ) : (
-          <button onClick={login} className="text-sm bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg transition font-medium shadow-lg shadow-purple-500/20">🔗 Login</button>
+          <button onClick={login} className="text-sm bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg transition font-medium">Login</button>
         )}
       </div>
 
@@ -141,16 +128,16 @@ export default function Home() {
               </div>
             </div>
             <p className="font-mono text-sm text-white/80 break-all">{walletAddress}</p>
-            <div className="flex items-center gap-4 pt-1">
-              <div className="text-center">
+            <div className="flex items-center gap-6 pt-1">
+              <div>
                 <p className="text-xs text-white/40">Pending</p>
                 <p className="text-lg font-bold text-red-400">${totalOwed.toFixed(2)}</p>
               </div>
-              <div className="text-center">
+              <div>
                 <p className="text-xs text-white/40">Settled</p>
                 <p className="text-lg font-bold text-green-400">{settled.length} txs</p>
               </div>
-              <div className="text-center">
+              <div>
                 <p className="text-xs text-white/40">Network</p>
                 <p className="text-sm font-semibold text-purple-300">Starknet Sepolia</p>
               </div>
@@ -165,7 +152,7 @@ export default function Home() {
               <p className="font-semibold">Login to get started</p>
               <p className="text-white/50 text-sm mt-1">Your Starknet wallet is created automatically. No seed phrase needed.</p>
             </div>
-            <button onClick={login} className="bg-purple-600 hover:bg-purple-500 transition px-8 py-3 rounded-xl text-sm font-semibold shadow-lg shadow-purple-500/20">🔗 Login with Email or Google</button>
+            <button onClick={login} className="bg-purple-600 hover:bg-purple-500 transition px-8 py-3 rounded-xl text-sm font-semibold">Login with Email or Google</button>
           </div>
         )}
 
@@ -176,14 +163,14 @@ export default function Home() {
             <input className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition" placeholder="Amount (STRK)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
           <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition" placeholder="Paid by (e.g. Mehmet)" value={paidBy} onChange={(e) => setPaidBy(e.target.value)} />
-          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition" placeholder="Split with: Ali, Ayşe, Fatma" value={members} onChange={(e) => setMembers(e.target.value)} />
+          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition" placeholder="Split with: Ali, Ayse, Fatma" value={members} onChange={(e) => setMembers(e.target.value)} />
           <button onClick={addExpense} className="w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition rounded-xl py-3 text-sm font-semibold shadow-lg shadow-purple-500/20">+ Add Expense</button>
         </div>
 
         {expenses.length === 0 ? (
           <div className="text-center text-white/20 text-sm py-8 space-y-2">
             <p className="text-3xl">💸</p>
-            <p>No expenses yet. Add one above ↑</p>
+            <p>No expenses yet. Add one above</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -193,21 +180,26 @@ export default function Home() {
               const isSettled = settled.includes(exp.id);
               const isLoading = loading === exp.id;
               const hash = txHash[exp.id];
+              const settledClass = "bg-green-500/5 border-green-500/20";
+              const defaultClass = "bg-white/5 border-white/10";
+              const btnSettled = "bg-green-500/20 text-green-400 cursor-default";
+              const btnLoading = "bg-purple-500/30 text-purple-300 cursor-wait";
+              const btnDefault = "bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 shadow-lg shadow-purple-500/20";
               return (
-                <div key={exp.id} className={`border rounded-2xl p-5 space-y-4 transition-all duration-500 ${isSettled ? "bg-green-500/5 border-green-500/20" : "bg-white/5 border-white/10"}`}>
+                <div key={exp.id} className={"border rounded-2xl p-5 space-y-4 transition-all duration-500 " + (isSettled ? settledClass : defaultClass)}>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold capitalize">{exp.title}</p>
                       <p className="text-white/40 text-xs mt-0.5">Paid by {exp.paidBy}</p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-2xl font-bold ${isSettled ? "text-green-400" : "text-purple-400"}`}>${exp.amount}</p>
+                      <p className={"text-2xl font-bold " + (isSettled ? "text-green-400" : "text-purple-400")}>${exp.amount}</p>
                       <p className="text-white/30 text-xs">${perPerson} / person</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {exp.people.map((p) => (
-                      <span key={p.name} className={`text-xs px-3 py-1 rounded-full ${isSettled ? "bg-green-500/10 text-green-300" : "bg-white/10 text-white/60"}`}>
+                      <span key={p.name} className={"text-xs px-3 py-1 rounded-full " + (isSettled ? "bg-green-500/10 text-green-300" : "bg-white/10 text-white/60")}>
                         {p.name} owes ${perPerson}
                       </span>
                     ))}
@@ -215,22 +207,15 @@ export default function Home() {
                   {isSettled && hash && (
                     <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
                       <p className="text-xs text-green-400/60 mb-0.5">Transaction Hash</p>
-                      
-                        href={`https://voyager.online/tx/${hash}?network=sepolia`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs text-green-300 break-all hover:text-green-200 underline"
-                      >
-                        {hash}
-                      </a>
+                      <p className="font-mono text-xs text-green-300 break-all">{hash}</p>
                     </div>
                   )}
                   <button
                     onClick={() => settleExpense(exp.id)}
                     disabled={isSettled || isLoading}
-                    className={`w-full py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${isSettled ? "bg-green-500/20 text-green-400 cursor-default" : isLoading ? "bg-purple-500/30 text-purple-300 cursor-wait" : "bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 shadow-lg shadow-purple-500/20"}`}
+                    className={"w-full py-3 rounded-xl text-sm font-semibold transition-all duration-300 " + (isSettled ? btnSettled : isLoading ? btnLoading : btnDefault)}
                   >
-                    {isSettled ? "✅ Settled on Starknet" : isLoading ? "⏳ Broadcasting via StarkZap..." : authenticated ? "⚡ Settle Gasless via StarkZap" : "🔗 Login to Settle"}
+                    {isSettled ? "Settled on Starknet" : isLoading ? "Broadcasting via StarkZap..." : authenticated ? "Settle Gasless via StarkZap" : "Login to Settle"}
                   </button>
                 </div>
               );
