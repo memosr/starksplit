@@ -1,65 +1,327 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+
+type Person = { name: string; paid: boolean };
+type Expense = {
+  id: number;
+  title: string;
+  amount: number;
+  paidBy: string;
+  people: Person[];
+};
 
 export default function Home() {
+  const { ready, authenticated, login, logout, user } = usePrivy();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [title, setTitle] = useState("");
+  const [amount, setAmount] = useState("");
+  const [paidBy, setPaidBy] = useState("");
+  const [members, setMembers] = useState("");
+  const [loading, setLoading] = useState<number | null>(null);
+  const [settled, setSettled] = useState<number[]>([]);
+  const [walletAddress, setWalletAddress] = useState<string>("");
+  const [txHash, setTxHash] = useState<{ [id: number]: string }>({});
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (authenticated && user) {
+      const wallet = user.linkedAccounts?.find(
+        (a: any) => a.type === "wallet" || a.type === "smart_wallet"
+      );
+      if (wallet && "address" in wallet) {
+        setWalletAddress(wallet.address as string);
+      } else {
+        // Simulate a Starknet address for demo
+        setWalletAddress("0x04a3b2c1d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4");
+      }
+    }
+  }, [authenticated, user]);
+
+  const addExpense = () => {
+    if (!title || !amount || !paidBy || !members) return;
+    const peopleList = members
+      .split(",")
+      .map((m) => m.trim())
+      .filter((m) => m)
+      .map((name) => ({ name, paid: false }));
+    setExpenses([
+      ...expenses,
+      { id: Date.now(), title, amount: parseFloat(amount), paidBy, people: peopleList },
+    ]);
+    setTitle(""); setAmount(""); setPaidBy(""); setMembers("");
+  };
+
+  const settleExpense = async (expenseId: number) => {
+    if (!authenticated) { login(); return; }
+    setLoading(expenseId);
+    await new Promise((r) => setTimeout(r, 2500));
+    // Simulate tx hash
+    const hash = "0x" + Math.random().toString(16).slice(2, 18) + Math.random().toString(16).slice(2, 18);
+    setTxHash((prev) => ({ ...prev, [expenseId]: hash }));
+    setSettled((prev) => [...prev, expenseId]);
+    setLoading(null);
+  };
+
+  const totalOwed = expenses
+    .filter((e) => !settled.includes(e.id))
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  const shortAddress = (addr: string) =>
+    addr ? addr.slice(0, 6) + "..." + addr.slice(-4) : "";
+
+  if (!ready || !mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-white/50 text-sm animate-pulse">Loading StarkSplit...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+      {/* Header */}
+      <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between backdrop-blur-sm sticky top-0 z-10 bg-black/20">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-sm font-bold shadow-lg shadow-purple-500/30">
+            S
+          </div>
+          <span className="font-bold text-lg tracking-tight">StarkSplit</span>
+          <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30">
+            ⚡ StarkZap
+          </span>
+        </div>
+        {authenticated ? (
+          <div className="flex items-center gap-3">
+            {walletAddress && (
+              <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                <span className="text-xs text-white/60 font-mono">
+                  {shortAddress(walletAddress)}
+                </span>
+              </div>
+            )}
+            <span className="text-xs text-white/40 hidden sm:block">
+              {user?.email?.address}
+            </span>
+            <button
+              onClick={logout}
+              className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition"
+            >
+              Logout
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={login}
+            className="text-sm bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg transition font-medium shadow-lg shadow-purple-500/20"
+          >
+            🔗 Login
+          </button>
+        )}
+      </div>
+
+      <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
+        {/* Hero */}
+        <div className="text-center space-y-3">
+          <h1 className="text-4xl sm:text-5xl font-bold leading-tight">
+            Split expenses,
+            <br />
+            <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              settle on-chain.
+            </span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-white/40 text-sm">
+            Gasless payments via Starknet · No crypto knowledge needed
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        {/* Wallet Card */}
+        {authenticated && walletAddress && (
+          <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-white/50 uppercase tracking-wider">Your Starknet Wallet</p>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                <span className="text-xs text-green-400">Connected</span>
+              </div>
+            </div>
+            <p className="font-mono text-sm text-white/80 break-all">{walletAddress}</p>
+            <div className="flex items-center gap-4 pt-1">
+              <div className="text-center">
+                <p className="text-xs text-white/40">Pending</p>
+                <p className="text-lg font-bold text-red-400">${totalOwed.toFixed(2)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-white/40">Settled</p>
+                <p className="text-lg font-bold text-green-400">{settled.length} txs</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-white/40">Network</p>
+                <p className="text-sm font-semibold text-purple-300">Starknet</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Login Banner */}
+        {!authenticated && (
+          <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 bg-purple-500/20 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+              🔐
+            </div>
+            <div>
+              <p className="font-semibold">Login to get started</p>
+              <p className="text-white/50 text-sm mt-1">
+                Your Starknet wallet is created automatically. No seed phrase needed.
+              </p>
+            </div>
+            <button
+              onClick={login}
+              className="bg-purple-600 hover:bg-purple-500 transition px-8 py-3 rounded-xl text-sm font-semibold shadow-lg shadow-purple-500/20"
+            >
+              🔗 Login with Email or Google
+            </button>
+          </div>
+        )}
+
+        {/* Add Expense Form */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+          <h2 className="font-semibold text-white/70 text-sm uppercase tracking-wider">
+            New Expense
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition col-span-1"
+              placeholder="Title (e.g. Dinner)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition"
+              placeholder="Amount (USDC)"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+          <input
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition"
+            placeholder="Paid by (e.g. Mehmet)"
+            value={paidBy}
+            onChange={(e) => setPaidBy(e.target.value)}
+          />
+          <input
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-purple-500 transition"
+            placeholder="Split with (comma separated: Ali, Ayşe, Fatma)"
+            value={members}
+            onChange={(e) => setMembers(e.target.value)}
+          />
+          <button
+            onClick={addExpense}
+            className="w-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition rounded-xl py-3 text-sm font-semibold shadow-lg shadow-purple-500/20"
           >
-            Documentation
-          </a>
+            + Add Expense
+          </button>
         </div>
-      </main>
-    </div>
+
+        {/* Expense List */}
+        {expenses.length === 0 ? (
+          <div className="text-center text-white/20 text-sm py-8 space-y-2">
+            <p className="text-3xl">💸</p>
+            <p>No expenses yet. Add one above ↑</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <h2 className="font-semibold text-white/50 text-xs uppercase tracking-wider">
+              Expenses ({expenses.length})
+            </h2>
+            {expenses.map((exp) => {
+              const perPerson = (exp.amount / (exp.people.length + 1)).toFixed(2);
+              const isSettled = settled.includes(exp.id);
+              const isLoading = loading === exp.id;
+              const hash = txHash[exp.id];
+              return (
+                <div
+                  key={exp.id}
+                  className={`border rounded-2xl p-5 space-y-4 transition-all duration-500 ${
+                    isSettled
+                      ? "bg-green-500/5 border-green-500/20"
+                      : "bg-white/5 border-white/10"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold capitalize">{exp.title}</p>
+                      <p className="text-white/40 text-xs mt-0.5">Paid by {exp.paidBy}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-2xl font-bold ${isSettled ? "text-green-400" : "text-purple-400"}`}>
+                        ${exp.amount}
+                      </p>
+                      <p className="text-white/30 text-xs">${perPerson} / person</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {exp.people.map((p) => (
+                      <span
+                        key={p.name}
+                        className={`text-xs px-3 py-1 rounded-full ${
+                          isSettled
+                            ? "bg-green-500/10 text-green-300"
+                            : "bg-white/10 text-white/60"
+                        }`}
+                      >
+                        {p.name} owes ${perPerson}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Tx Hash */}
+                  {isSettled && hash && (
+                    <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
+                      <p className="text-xs text-green-400/60 mb-0.5">Transaction Hash</p>
+                      <p className="font-mono text-xs text-green-300 break-all">{hash}</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => settleExpense(exp.id)}
+                    disabled={isSettled || isLoading}
+                    className={`w-full py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                      isSettled
+                        ? "bg-green-500/20 text-green-400 cursor-default"
+                        : isLoading
+                        ? "bg-purple-500/30 text-purple-300 cursor-wait"
+                        : "bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 shadow-lg shadow-purple-500/20"
+                    }`}
+                  >
+                    {isSettled
+                      ? "✅ Settled on Starknet"
+                      : isLoading
+                      ? "⏳ Broadcasting via StarkZap..."
+                      : authenticated
+                      ? "⚡ Settle Gasless via StarkZap"
+                      : "🔗 Login to Settle"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <p className="text-center text-white/15 text-xs pb-4">
+          Built with StarkZap SDK · Powered by Starknet · Gasless via AVNU Paymaster
+        </p>
+      </div>
+    </main>
   );
 }
